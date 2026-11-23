@@ -245,12 +245,35 @@ def test_modify_delete_and_add_add_conflicts(pair: Pair) -> None:
 
 
 def test_mode_change_merges_like_git(pair: Pair) -> None:
+    """Одна сторона сделала файл исполняемым, другая правила другой файл: слияние берёт режим из изменившей стороны."""
     if os.name == "nt":
         pytest.skip("режим исполняемости на Windows не определяется")
-    _setup_branches(pair, {"s": "#!/bin/sh\n", "t": "t\n"}, {"t": "t changed\n"}, {"s": "#!/bin/sh\n"})
-    os.chmod(pair.ref_dir / "s", 0o755)
+    pair.write({"s": "#!/bin/sh\n", "t": "t\n"})
+    _commit_both(pair, "base")
+    pair.ours.create_branch("topic")
+    run_git(pair.ref_dir, "branch", "topic")
+    cwd = os.getcwd()
+    os.chdir(pair.ours_dir)
+    try:
+        pair.ours.checkout("topic")
+    finally:
+        os.chdir(cwd)
+    run_git(pair.ref_dir, "checkout", "-q", "topic")
+    for root in (pair.ours_dir, pair.ref_dir):
+        os.chmod(root / "s", 0o755)  # только режим: содержимое то же
+    _commit_both(pair, "make s executable")
+    os.chdir(pair.ours_dir)
+    try:
+        pair.ours.checkout("main")
+    finally:
+        os.chdir(cwd)
+    run_git(pair.ref_dir, "checkout", "-q", "main")
+    pair.write({"t": "t changed\n"})
+    _commit_both(pair, "main edits t")
     result, ref = _merge_both(pair)
     assert getattr(result, "status", "") == "merged" and ref.returncode == 0
+    assert pair.ours.head_commit() == git_text(pair.ref_dir, "rev-parse", "HEAD").strip()
+    assert "100755" in git_text(pair.ours_dir, "ls-tree", "HEAD")
 
 
 def test_fast_forward_up_to_date_and_no_ff(pair: Pair) -> None:

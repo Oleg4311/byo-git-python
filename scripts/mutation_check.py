@@ -98,6 +98,11 @@ MUTATIONS: list[tuple[str, str, str, str, str]] = [
 
 
 def main() -> int:
+    # без исходной проверки на целых тестах мутации ничего не доказывают: упавший заранее набор «ловит» что угодно
+    base = subprocess.run([sys.executable, "-m", "pytest", "tests", "-q", "-x", "-p", "no:cacheprovider"], cwd=ROOT, capture_output=True, text=True)
+    if base.returncode != 0:
+        print("исходные тесты не проходят: мутационная проверка невозможна\n" + base.stdout[-1500:])
+        return 2
     survived: list[str] = []
     for title, name, old, new, tests in MUTATIONS:
         path = SRC / name
